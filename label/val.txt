@@ -1,0 +1,2 @@
+data/DUMMY2/p225/p225_060.wav|data/spkerEmbed/p225_060.npy|data/hubert16k/p225_060.npy
+
