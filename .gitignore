@@ -1,0 +1,10 @@
+*.wav
+*.npy
+logs
+__pycache__
+tmp*
+pretrained_models
+.vscode
+label/*
+lab.ipynb
+*.ipynb_checkpoints
