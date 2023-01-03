@@ -1,3 +1,6 @@
+## Demo
+[paper page](https://blog.frostmiku.com/Flow-VAE-VC/)
+
 ## Setup
 1. resample the dataset sr to 16k
 2. run `python 1.extract_hubert_soft.py soft /path/to/dataset data/hubert16k` to extract unit
