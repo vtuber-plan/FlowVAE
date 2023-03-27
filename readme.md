@@ -1,3 +1,5 @@
+Note: check e2e branch to get End 2 End Version
+
 ## Demo
 [paper page](https://blog.frostmiku.com/Flow-VAE-VC/)
 
