@@ -1,0 +1,20 @@
+p225_p226_001:
+    source: test/src/p225_001.wav
+    target:
+        - test/trg/p226_001.wav
+p225_p226_002:
+    source: test/src/p225_002.wav
+    target:
+        - test/trg/p226_002.wav
+p225_p226_003:
+    source: test/src/p225_003.wav
+    target:
+        - test/trg/p226_003.wav
+p225_p226_004:
+    source: test/src/p225_004.wav
+    target:
+        - test/trg/p226_004.wav
+p225_p226_005:
+    source: test/src/p225_005.wav
+    target:
+        - test/trg/p226_005.wav

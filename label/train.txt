@@ -1,2 +1,2 @@
-data/DUMMY2/p239/p239_219.wav|data/spkerEmbed/p239_219.npy|data/hubert16k/p239_219.npy
+data/DUMMY2/p239/p239_219.wav|data/spkerEmbed/p239_219.npy
 

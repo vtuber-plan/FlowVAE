@@ -7,3 +7,4 @@ pretrained_models
 .vscode
 lab.ipynb
 *.ipynb_checkpoints
+.DS_Store
