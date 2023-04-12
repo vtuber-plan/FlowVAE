@@ -40,7 +40,7 @@ class Config():
         # self.kappa = 0.1
 
         
-class Data():
+class Augmentor():
     def __init__(self):
         self.config = Config()
         self.aug = Augment(self.config)

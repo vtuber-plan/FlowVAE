@@ -6,7 +6,7 @@ import torch.utils.data
 from utils import load_wav_to_torch
 from mel_processing import spectrogram_torch
 import numpy as np
-from augment import Data
+from augment import Augmentor
 
 
 def load_filepaths(filename, split="|"):
@@ -85,7 +85,7 @@ class AudioSpeakerLoader(torch.utils.data.Dataset):
         return len(self.audiopaths_sid_unit)
 
 
-aug = Data()
+aug = Augmentor()
 
 
 class AudioSpeakerCollate():
