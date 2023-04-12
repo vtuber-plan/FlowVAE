@@ -21,17 +21,12 @@ def constractive_loss(hidden1: torch.Tensor,
   hidden1_large = hidden1
   hidden2_large = hidden2
   labels = torch.arange(0, T).to(device=hidden1.device)
-  masks = torch.nn.functional.one_hot(torch.arange(0, T), num_classes=T).to(device=hidden1.device, dtype=torch.float)
 
-  logits_aa = torch.matmul(hidden1, hidden1_large.transpose(0, 1)) / temperature  # shape (bsz, bsz)
-  logits_aa = logits_aa - masks * large_num # remove the same samples
-  logits_bb = torch.matmul(hidden2, hidden2_large.transpose(0, 1)) / temperature  # shape (bsz, bsz)
-  logits_bb = logits_bb - masks * large_num # remove the same samples
-  logits_ab = torch.matmul(hidden1, hidden2_large.transpose(0, 1)) / temperature  # shape (bsz, bsz)
-  logits_ba = torch.matmul(hidden2, hidden1_large.transpose(0, 1)) / temperature  # shape (bsz, bsz)
+  logits_ab = torch.matmul(hidden1, hidden2_large.transpose(0, 1)) / temperature
+  logits_ba = torch.matmul(hidden2, hidden1_large.transpose(0, 1)) / temperature
 
-  loss_a = torch.nn.functional.cross_entropy(torch.cat([logits_ab, logits_aa], dim=1), labels) # shape (bsz, 2 bsz)
-  loss_b = torch.nn.functional.cross_entropy(torch.cat([logits_ba, logits_bb], dim=1), labels)
+  loss_a = torch.nn.functional.cross_entropy(logits_ab, labels) # shape (T, T)
+  loss_b = torch.nn.functional.cross_entropy(logits_ba, labels)
   loss = loss_a + loss_b
   return loss
 
