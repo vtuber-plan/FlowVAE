@@ -8,3 +8,5 @@ pretrained_models
 lab.ipynb
 *.ipynb_checkpoints
 .DS_Store
+label/*.set
+data
