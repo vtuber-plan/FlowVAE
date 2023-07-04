@@ -1,25 +1,13 @@
 import os
-# import json
-# import argparse
-# import itertools
-# import math
 import torch
-# from torch import nn, optim
 from torch.nn import functional as F
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
-# import torch.multiprocessing as mp
-# import torch.distributed as dist
-# from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.cuda.amp import autocast, GradScaler
-# from torch.utils.data.distributed import DistributedSampler
 
 import commons
 import utils
-# from hubert_data import (
-#     AudioSpeakerHubertLoader,
-#     AudioSpeakerUnitCollate
-# )
+
 from dataset import (
     AudioSpeakerLoader,
     AudioSpeakerCollate
