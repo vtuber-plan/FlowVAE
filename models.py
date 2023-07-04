@@ -44,7 +44,7 @@ class PriorEncoder(nn.Module):
     def forward(self, x, x_lengths):
         x_mask = torch.unsqueeze(commons.sequence_mask(
             x_lengths, x.size(2)), 1).to(x.dtype)
-
+        x = self.prenet(x)
         x = self.encoder(x * x_mask, x_mask)
         stats = self.proj(x) * x_mask
 
@@ -322,7 +322,7 @@ class SynthesizerTrn(nn.Module):
 
         self.use_sdp = use_sdp
         
-        self.gst = GST(n_mel=self.mel_channels, E=self.gin_channels)
+        self.gst = GST(n_mels=self.mel_channels, E=self.gin_channels)
 
         self.enc_p = PriorEncoder(
             spec_channels,

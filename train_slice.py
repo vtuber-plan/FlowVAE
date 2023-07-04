@@ -178,10 +178,7 @@ def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loade
 
                 loss_fm = feature_loss(fmap_r, fmap_g)
                 loss_gen, losses_gen = generator_loss(y_d_hat_g)
-                loss_ctr = constractive_loss(
-                    c1.transpose(0, 1), c2.transpose(0, 1)) # constract for T dim
-                # loss_gen_all = loss_gen + loss_fm + loss_mel + loss_dur + loss_kl
-                loss_gen_all = loss_gen + loss_fm + loss_mel + loss_kl + loss_ctr
+                loss_gen_all = loss_gen + loss_fm + loss_mel + loss_kl
         optim_g.zero_grad()
         scaler.scale(loss_gen_all).backward()
         scaler.unscale_(optim_g)
@@ -202,7 +199,7 @@ def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loade
                 scalar_dict = {"loss/g/total": loss_gen_all, "loss/d/total": loss_disc_all,
                                "learning_rate": lr, "grad_norm_d": grad_norm_d, "grad_norm_g": grad_norm_g}
                 scalar_dict.update(
-                    {"loss/g/fm": loss_fm, "loss/g/mel": loss_mel, "loss/g/kl": loss_kl, "loss/g/ctr": loss_ctr})
+                    {"loss/g/fm": loss_fm, "loss/g/mel": loss_mel, "loss/g/kl": loss_kl})
 
                 scalar_dict.update(
                     {"loss/g/{}".format(i): v for i, v in enumerate(losses_gen)})

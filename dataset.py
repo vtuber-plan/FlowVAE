@@ -118,7 +118,7 @@ class AudioCollate():
             spec_lengths[i] = spec.size(1)
 
             mel = row[2]
-            mel_padded[i, :, :spec.size(1)] = spec
+            mel_padded[i, :, :spec.size(1)] = mel
 
             wav = row[1]
             wav_padded[i, :, :wav.size(1)] = wav

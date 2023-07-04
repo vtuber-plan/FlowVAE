@@ -6,10 +6,10 @@ import torch.nn.functional as F
 
 class GST(nn.Module):
 
-    def __init__(self, n_mel=80, token_num=10, num_heads=8, E=256):
+    def __init__(self, n_mels=80, token_num=10, num_heads=8, E=256):
 
         super().__init__()
-        self.encoder = ReferenceEncoder(n_mel=n_mel, E=E)
+        self.encoder = ReferenceEncoder(n_mels=n_mels, E=E)
         self.stl = STL(E=E, token_num=token_num, num_heads=num_heads)
 
     def forward(self, inputs):
@@ -25,10 +25,10 @@ class ReferenceEncoder(nn.Module):
     outputs --- [N, ref_enc_gru_size]
     '''
 
-    def __init__(self, n_mel, E):
+    def __init__(self, n_mels, E):
 
         super().__init__()
-        self.n_mel = n_mel
+        self.n_mels = n_mels
         ref_enc_filters = [32, 32, 64, 64, 128, 128]
         K = len(ref_enc_filters)
         filters = [1] + ref_enc_filters
