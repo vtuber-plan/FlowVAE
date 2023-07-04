@@ -45,7 +45,7 @@
     "upsample_kernel_sizes": [16,9,8,4],
     "n_layers_q": 3,
     "use_spectral_norm": false,
-    "gin_channels": 192,
+    "gin_channels": 256,
     "use_sdp": true
   }
 }

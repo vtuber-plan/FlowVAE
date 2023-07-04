@@ -9,8 +9,8 @@ import commons
 import utils
 
 from dataset import (
-    AudioSpeakerLoader,
-    AudioSpeakerCollate
+    AudioLoader,
+    AudioCollate
 )
 from models import (
     SynthesizerTrn,
@@ -57,12 +57,12 @@ def run(rank, hps):
     torch.manual_seed(hps.train.seed)
     torch.cuda.set_device(rank)
 
-    train_dataset = AudioSpeakerLoader(hps.data.training_files, hps.data)
-    collate_fn = AudioSpeakerCollate(hps.data)
+    train_dataset = AudioLoader(hps.data.training_files, hps.data)
+    collate_fn = AudioCollate(hps.data)
     train_loader = DataLoader(train_dataset, batch_size=hps.train.batch_size, num_workers=8,
                               shuffle=False, pin_memory=True, collate_fn=collate_fn)
     if rank == which_device:
-        eval_dataset = AudioSpeakerLoader(
+        eval_dataset = AudioLoader(
             hps.data.validation_files, hps.data)
         eval_loader = DataLoader(eval_dataset, num_workers=8, shuffle=False,
                                  batch_size=hps.train.batch_size, pin_memory=True,
@@ -70,6 +70,7 @@ def run(rank, hps):
 
     net_g = SynthesizerTrn(
         hps.data.filter_length // 2 + 1,
+        hps.data.n_mel_channels,
         hps.train.segment_size // hps.data.hop_length,
         n_speakers=hps.data.n_speakers,
         **hps.model).cuda(rank)
@@ -127,32 +128,19 @@ def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loade
 
     net_g.train()
     net_d.train()
-    for batch_idx, (x, spec, spec_lengths, y, y_lengths, speakers) in enumerate(train_loader):
+    for batch_idx, (x, spec, mel, spec_lengths, y, y_lengths) in enumerate(train_loader):
         x = x.cuda(rank, non_blocking=True)
+        mel = mel.cuda(rank, non_blocking=True)
         spec, spec_lengths = spec.cuda(
             rank, non_blocking=True), spec_lengths.cuda(rank, non_blocking=True)
         y, y_lengths = y.cuda(rank, non_blocking=True), y_lengths.cuda(
             rank, non_blocking=True)
-        speakers = speakers.cuda(rank, non_blocking=True)
 
         with autocast(enabled=hps.train.fp16_run):
-            # y_hat, l_length, attn, ids_slice, x_mask, z_mask,\
             y_hat, ids_slice, x_mask, z_mask,\
-                (z, z_p, m_p, logs_p, m_q, logs_q), c1, c2 = net_g(
-                    x, spec, spec_lengths, speakers)
-            
-            # slice to calc ctr
-            c1, slice_idx = commons.rand_slice_segments(c1, spec_lengths, hps.train.segment_size // hps.data.hop_length)
-            c1.squeeze_(1)
-            c2 = commons.slice_segments(c2, slice_idx, hps.train.segment_size // hps.data.hop_length).squeeze(1)
+                (z, z_p, m_p, logs_p, m_q, logs_q)= net_g(
+                    x, spec, spec_lengths, mel)
 
-            mel = spec_to_mel_torch(
-                spec,
-                hps.data.filter_length,
-                hps.data.n_mel_channels,
-                hps.data.sampling_rate,
-                hps.data.mel_fmin,
-                hps.data.mel_fmax)
             y_mel = commons.slice_segments(
                 mel, ids_slice, hps.train.segment_size // hps.data.hop_length)
             y_hat_mel = mel_spectrogram_torch(
@@ -213,7 +201,6 @@ def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loade
 
                 scalar_dict = {"loss/g/total": loss_gen_all, "loss/d/total": loss_disc_all,
                                "learning_rate": lr, "grad_norm_d": grad_norm_d, "grad_norm_g": grad_norm_g}
-                # scalar_dict.update({"loss/g/fm": loss_fm, "loss/g/mel": loss_mel, "loss/g/dur": loss_dur, "loss/g/kl": loss_kl})
                 scalar_dict.update(
                     {"loss/g/fm": loss_fm, "loss/g/mel": loss_mel, "loss/g/kl": loss_kl, "loss/g/ctr": loss_ctr})
 
@@ -250,12 +237,12 @@ def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loade
 def evaluate(hps, generator, eval_loader, writer_eval):
     generator.eval()
     with torch.no_grad():
-        for batch_idx, (x, spec, spec_lengths, y, y_lengths, speakers) in enumerate(eval_loader):
+        for batch_idx, (x, spec, mel, spec_lengths, y, y_lengths) in enumerate(eval_loader):
             x = x.cuda(which_device)
             spec, spec_lengths = spec.cuda(
                 which_device), spec_lengths.cuda(which_device)
             y, y_lengths = y.cuda(which_device), y_lengths.cuda(which_device)
-            speakers = speakers.cuda(which_device)
+            mel = mel.cuda(which_device)
 
             # remove else
             x = x[:1]
@@ -263,20 +250,13 @@ def evaluate(hps, generator, eval_loader, writer_eval):
             spec_lengths = spec_lengths[:1]
             y = y[:1]
             y_lengths = y_lengths[:1]
-            speakers = speakers[:1]
+            mel = mel[:1]
             break
-        # y_hat, mask, *_ = generator.module.infer(x, x_lengths, speakers, max_len=1000)
+
         # x len same as y
-        y_hat, mask, *_ = generator.infer(spec, spec_lengths, speakers)
+        y_hat, mask, *_ = generator.infer(spec, spec_lengths, mel)
         y_hat_lengths = mask.sum([1, 2]).long() * hps.data.hop_length
 
-        mel = spec_to_mel_torch(
-            spec,
-            hps.data.filter_length,
-            hps.data.n_mel_channels,
-            hps.data.sampling_rate,
-            hps.data.mel_fmin,
-            hps.data.mel_fmax)
         y_hat_mel = mel_spectrogram_torch(
             y_hat.squeeze(1).float(),
             hps.data.filter_length,

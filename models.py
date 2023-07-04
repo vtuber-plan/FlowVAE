@@ -3,6 +3,7 @@ from torch import nn
 from torch.nn import functional as F
 
 import commons
+from gst import GST
 import modules
 import attentions
 
@@ -10,41 +11,9 @@ from torch.nn import Conv1d, ConvTranspose1d, Conv2d
 from torch.nn.utils import weight_norm, remove_weight_norm, spectral_norm
 from commons import init_weights, get_padding
 
-class ContentExtracter(nn.Module):
-    def __init__(self,
-                in_channels,
-                out_channels,
-                hidden_channels
-                ):
-        super().__init__()
-        self.in_channels = in_channels
-        self.out_channels = out_channels
-        self.hidden_channels = hidden_channels
-        
-        self.prenet = modules.PreConv(in_channels, hidden_channels, 128)
-        self.resblocks = nn.ModuleList()
-        for i in range(4): # todo config it
-            self.resblocks.append(modules.ResBlock1(hidden_channels))
-        
-        self.out = nn.Conv1d(hidden_channels, out_channels, 1)
-        
-        self.proj = nn.Conv1d(out_channels, 1, 1, bias=False)
-    
-    def forward(self, x, x_lengths):
-        # [b,c,t]
-        x_mask = torch.unsqueeze(commons.sequence_mask(
-            x_lengths, x.size(2)), 1).to(x.dtype)
-
-        x = self.prenet(x) * x_mask
-        for l in self.resblocks:
-            x = l(x) * x_mask
-        x = self.out(x) * x_mask
-        return x, self.proj(x) * x_mask, x_mask #for slice
-
-
 class PriorEncoder(nn.Module):
     def __init__(self,
-                 # in_channels,
+                 in_channels,
                  out_channels,
                  hidden_channels,
                  filter_channels,
@@ -53,7 +22,7 @@ class PriorEncoder(nn.Module):
                  kernel_size,
                  p_dropout):
         super().__init__()
-        # self.in_channels = in_channels
+        self.in_channels = in_channels
         self.out_channels = out_channels
         self.hidden_channels = hidden_channels
         self.filter_channels = filter_channels
@@ -62,7 +31,7 @@ class PriorEncoder(nn.Module):
         self.kernel_size = kernel_size
         self.p_dropout = p_dropout
 
-        # self.prenet = modules.PreConv(in_channels, hidden_channels, 192)
+        self.prenet = modules.PreConv(in_channels, hidden_channels, 192)
         self.encoder = attentions.Encoder(
             hidden_channels,
             filter_channels,
@@ -72,10 +41,9 @@ class PriorEncoder(nn.Module):
             p_dropout)
         self.proj = nn.Conv1d(hidden_channels, out_channels * 2, 1)
 
-    def forward(self, x, x_mask):
-        # x = torch.transpose(x, 1, -1) # [b, h, t] 在dataloader里变换过了
-        # x_mask = torch.unsqueeze(commons.sequence_mask(
-            # x_lengths, x.size(2)), 1).to(x.dtype)
+    def forward(self, x, x_lengths):
+        x_mask = torch.unsqueeze(commons.sequence_mask(
+            x_lengths, x.size(2)), 1).to(x.dtype)
 
         x = self.encoder(x * x_mask, x_mask)
         stats = self.proj(x) * x_mask
@@ -312,6 +280,7 @@ class SynthesizerTrn(nn.Module):
 
     def __init__(self,
                  spec_channels,
+                 mel_channels,
                  segment_size,
                  inter_channels,
                  hidden_channels,
@@ -333,6 +302,7 @@ class SynthesizerTrn(nn.Module):
 
         super().__init__()
         self.spec_channels = spec_channels
+        self.mel_channels = mel_channels
         self.inter_channels = inter_channels
         self.hidden_channels = hidden_channels
         self.filter_channels = filter_channels
@@ -352,13 +322,10 @@ class SynthesizerTrn(nn.Module):
 
         self.use_sdp = use_sdp
         
-        self.ext_c = ContentExtracter(
-            spec_channels,
-            hidden_channels,
-            inter_channels)
+        self.gst = GST(n_mel=self.mel_channels, E=self.gin_channels)
 
         self.enc_p = PriorEncoder(
-            # spec_channels,
+            spec_channels,
             inter_channels,
             hidden_channels,
             filter_channels,
@@ -373,19 +340,14 @@ class SynthesizerTrn(nn.Module):
         self.flow = ResidualCouplingBlock(
             inter_channels, hidden_channels, 5, 1, 4, gin_channels=gin_channels)
 
-    # def forward(self, x, x_lengths, y, y_lengths, sid=None):
-    # x length same as y lengths
-    def forward(self, x, y, y_lengths, sid=None):
-        x = F.interpolate(x, size=(y.shape[2],), mode="nearest")
-        
-        x, c1, x_mask = self.ext_c(x, y_lengths)
-        _, c2, _ = self.ext_c(y, y_lengths)
 
-        x, m_p, logs_p, x_mask = self.enc_p(x, x_mask)
-        if self.n_speakers and sid is not None:
-            g = sid.unsqueeze(-1)  # [b, h, 1]
-        else:
-            g = None
+    # x length same as y lengths
+    def forward(self, x, y, y_lengths, mel):
+        x = F.interpolate(x, size=(y.shape[2],), mode="nearest")
+        x, m_p, logs_p, x_mask = self.enc_p(x, y_lengths)
+        
+        g = self.gst(mel) # [b, 1, gin_channels]
+        g = g.transpose(1, 2) # [b, gin_channels, 1]
 
         z, m_q, logs_q, y_mask = self.enc_q(y, y_lengths, g=g)
         z_p = self.flow(z, y_mask, g=g)
@@ -395,17 +357,23 @@ class SynthesizerTrn(nn.Module):
 
         o = self.dec(z_slice, g=g)
 
-        return o, ids_slice, x_mask, y_mask, (z, z_p, m_p, logs_p, m_q, logs_q), c1, c2
+        return o, ids_slice, x_mask, y_mask, (z, z_p, m_p, logs_p, m_q, logs_q)
 
-    def infer(self, x, x_lengths, sid=None, noise_scale=1, length_scale=1, noise_scale_w=1., max_len=None):
-        x, c, x_mask = self.ext_c(x, x_lengths)
-        x, m_p, logs_p, x_mask = self.enc_p(x, x_mask)
-        if self.n_speakers and sid is not None:
-            g = sid.unsqueeze(-1)  # [b, h, 1]
-        else:
-            g = None
+    def infer(self, x, x_lengths, mel, noise_scale=1, length_scale=1, noise_scale_w=1., max_len=None):
+        g_token = self.gst(mel)
+        return self.voice_conversion(x,x_lengths,g_token,noise_scale,length_scale,max_len)
 
-        y_lengths = (x_lengths * length_scale).long()
+
+    def voice_conversion(self, spec, spec_lengths, g_token, noise_scale=1, length_scale=1, max_len=None):
+        '''
+        g_token: [b, 1, gin_channels]
+        can be get by self.gst(mel)
+        '''
+        x, m_p, logs_p, x_mask = self.enc_p(spec, spec_lengths)
+
+        g = g_token.transpose(1, 2) # [b, gin_channels, 1]
+
+        y_lengths = (spec_lengths * length_scale).long()
         y_mask = torch.unsqueeze(commons.sequence_mask(y_lengths, None), 1).to(x_mask.dtype)
 
         # 22/11/16 添加插值处理
@@ -417,14 +385,3 @@ class SynthesizerTrn(nn.Module):
         z = self.flow(z_p, y_mask, g=g, reverse=True)
         o = self.dec((z * y_mask)[:, :, :max_len], g=g)
         return o, y_mask, (z, z_p, m_p, logs_p)
-
-    # 22/11/16 maybe need to modify
-    def voice_conversion(self, y, y_lengths, sid_src, sid_tgt):
-        assert self.n_speakers, "n_speakers have to be True."
-        g_src = sid_src.unsqueeze(-1) if sid_src is not None else None
-        g_tgt = sid_tgt.unsqueeze(-1)
-        z, m_q, logs_q, y_mask = self.enc_q(y, y_lengths, g=g_src)
-        z_p = self.flow(z, y_mask, g=g_src)
-        z_hat = self.flow(z_p, y_mask, g=g_tgt, reverse=True)
-        o_hat = self.dec(z_hat * y_mask, g=g_tgt)
-        return o_hat, y_mask, (z, z_p, z_hat)
