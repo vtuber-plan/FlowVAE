@@ -1,5 +1,4 @@
-## Demo
-Here is End-to-End version.
+Unofficial implementation of FlowVAE
 
 ![arch](flowvae.png)
 
