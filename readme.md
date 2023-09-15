@@ -1,4 +1,5 @@
 Unofficial implementation of FlowVAE
+**code is updated after original method, pls check commits**
 
 ![arch](flowvae.png)
 
