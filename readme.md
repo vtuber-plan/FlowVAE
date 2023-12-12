@@ -4,7 +4,6 @@ Unofficial implementation of FlowVAE
 
 ![arch](flowvae.png)
 
-[demo & paper page](https://blog.frostmiku.com/Flow-VAE-VC/)
 
 ## Setup
 1. resample the dataset sr to 16k
